@@ -16,11 +16,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 更新按钮样式
             tabButtons.forEach(btn => {
-                btn.classList.remove('bg-blue-100', 'text-blue-700');
-                btn.classList.add('text-gray-600', 'hover:bg-gray-100');
+                btn.classList.remove('bg-brand-50', 'text-brand-700');
+                btn.classList.add('text-gray-600', 'hover:bg-gray-50');
             });
-            button.classList.remove('text-gray-600', 'hover:bg-gray-100');
-            button.classList.add('bg-blue-100', 'text-blue-700');
+            button.classList.remove('text-gray-600', 'hover:bg-gray-50');
+            button.classList.add('bg-brand-50', 'text-brand-700');
             
             // 更新内容显示
             tabContents.forEach(content => {
@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         let lastIndex = 0;
+        
         logPollingInterval = setInterval(() => {
             fetch(`/api/logs/${taskId}?last_index=${lastIndex}`)
                 .then(response => response.json())
@@ -54,6 +55,18 @@ document.addEventListener('DOMContentLoaded', function() {
                             // 添加到当前会话
                             historyComponent.addLogToCurrentSession(log);
                             
+                            // 更新思考状态
+                            const loadingElement = document.querySelector('.loading-indicator');
+                            if (loadingElement) {
+                                if (log.message.includes('思考') || log.message.includes('thoughts')) {
+                                    chatComponent.updateThinkingMessage(loadingElement, log.message);
+                                } else if (log.message.includes('执行工具') || log.message.includes('Activating tool')) {
+                                    chatComponent.updateThinkingMessage(loadingElement, `🔧 ${log.message}`);
+                                } else if (log.message.includes('分析') || log.message.includes('analyzing')) {
+                                    chatComponent.updateThinkingMessage(loadingElement, `🔍 ${log.message}`);
+                                }
+                            }
+                            
                             // 检测浏览器URL
                             if (log.message.includes('正在访问网页:') || log.message.includes('浏览器访问:')) {
                                 const urlMatch = log.message.match(/: (https?:\/\/[^\s]+)/);
@@ -62,16 +75,50 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                             }
                             
-                            // 检测文件保存
-                            if (log.message.includes('已保存文件:') || log.message.includes('Saved file:')) {
-                                const fileMatch = log.message.match(/: ([^\s]+) - (.+)/);
-                                if (fileMatch && fileMatch[1] && fileMatch[2]) {
-                                    const filePath = fileMatch[1];
-                                    const fileContent = fileMatch[2];
-                                    fileManagerComponent.updateFiles({
-                                        path: filePath,
-                                        content: fileContent
-                                    });
+                            // 检测文件保存 - 修改匹配模式以适应实际日志格式
+                            if (log.message.includes('文件已保存:') || log.message.includes('调用文件保存工具')) {
+                                console.log("检测到文件保存日志:", log.message);
+                                
+                                // 首先尝试解析工具调用参数
+                                if (log.message.includes('调用文件保存工具')) {
+                                    try {
+                                        const paramMatch = log.message.match(/参数: ({.*})/);
+                                        if (paramMatch) {
+                                            const params = JSON.parse(paramMatch[1].replace(/'/g, '"'));
+                                            if (params.file_path && params.content) {
+                                                console.log("从参数中提取文件信息:", params.file_path);
+                                                fileManagerComponent.updateFiles({
+                                                    path: params.file_path,
+                                                    content: params.content
+                                                });
+                                            }
+                                        }
+                                    } catch (e) {
+                                        console.error('解析文件参数时出错:', e);
+                                    }
+                                }
+                                
+                                // 然后尝试匹配简单的文件路径
+                                const simpleMatch = log.message.match(/文件已保存: ([^\s]+)/);
+                                if (simpleMatch && simpleMatch[1]) {
+                                    const filePath = simpleMatch[1];
+                                    console.log("检测到文件路径:", filePath);
+                                    
+                                    // 如果文件内容还没有通过参数获取到，尝试从文件系统读取
+                                    if (!fileManagerComponent.files[filePath]) {
+                                        fetch(`/api/files/${filePath}`)
+                                            .then(response => response.text())
+                                            .then(content => {
+                                                console.log("获取到文件内容:", filePath);
+                                                fileManagerComponent.updateFiles({
+                                                    path: filePath,
+                                                    content: content
+                                                });
+                                            })
+                                            .catch(error => {
+                                                console.error('获取文件内容时出错:', error);
+                                            });
+                                    }
                                 }
                             }
                         });
@@ -101,8 +148,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         clearInterval(statusPollingInterval);
                         clearInterval(logPollingInterval);
                         
-                        // 移除加载指示器
-                        const loadingElement = document.querySelector('.bot-message:last-child .thinking-dot').closest('.bot-message');
+                        // 移除加载状态
+                        const loadingElement = document.querySelector('.loading-indicator');
                         if (loadingElement) {
                             loadingElement.remove();
                         }
@@ -114,12 +161,15 @@ document.addEventListener('DOMContentLoaded', function() {
                             // 添加到当前会话
                             historyComponent.addMessageToCurrentSession(data.response, 'bot');
                         }
+                        
+                        // 重置当前任务ID
+                        currentTaskId = null;
                     }
                 })
                 .catch(error => {
                     console.error('获取状态时出错:', error);
                 });
-        }, 2000);
+        }, 1000);
     }
     
     // 监听消息发送事件
@@ -153,32 +203,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // 监听新会话事件
-    document.addEventListener('newSession', function(e) {
-        // 清空聊天记录
-        document.getElementById('chat-messages').innerHTML = '';
+    // 监听会话加载事件
+    document.addEventListener('sessionLoaded', function(e) {
+        const session = e.detail.session;
+        
+        // 清空聊天消息
+        chatComponent.clearMessages();
         
         // 添加欢迎消息
         chatComponent.addMessage('你好！我是OpenManus智能助手。请输入您的问题或指令，我会尽力帮助您。', 'bot');
         
-        // 清空日志
-        loggerComponent.clearLogs();
-        
-        // 清空浏览器
-        browserComponent.clear();
-        
-        // 清空文件
-        fileManagerComponent.clear();
-    });
-    
-    // 监听加载会话事件
-    document.addEventListener('loadSession', function(e) {
-        const session = e.detail.session;
-        
-        // 清空聊天记录
-        document.getElementById('chat-messages').innerHTML = '';
-        
-        // 加载消息
+        // 添加会话消息
         session.messages.forEach(msg => {
             chatComponent.addMessage(msg.content, msg.sender);
         });
@@ -253,4 +288,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化完成后自动聚焦到输入框
     document.getElementById('user-input').focus();
+    
+    // 添加API端点获取文件内容
+    // 注意：这需要在服务器端添加相应的API端点
+    // 如果服务器端没有此API，我们需要修改服务器代码
 }); 
