@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenManus 智能助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#e6f7f4',
+                            100: '#ccefe9',
+                            200: '#99dfd3',
+                            300: '#66cfbd',
+                            400: '#33bfa7',
+                            500: '#00af91',
+                            600: '#008c74',
+                            700: '#006957',
+                            800: '#00463a',
+                            900: '#00231d',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: .5; transform: scale(1.1); }
+        }
+        .thinking-dot {
+            animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .thinking-dot:nth-child(2) {
+            animation-delay: 0.3s;
+        }
+        .thinking-dot:nth-child(3) {
+            animation-delay: 0.6s;
+        }
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .code-block {
+            font-family: 'Fira Code', monospace;
+        }
+        .recording {
+            color: #ef4444;
+            animation: pulse 2s infinite;
+        }
+        .paused {
+            color: #f59e0b;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen">
+    <div class="flex h-screen overflow-hidden">
+        <!-- 左侧导航栏 -->
+        <div class="w-64 bg-white border-r border-gray-200 flex flex-col">
+            <header class="h-16 border-b border-gray-200 flex items-center px-4">
+                <div class="flex items-center">
+                    <div class="text-brand-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                    </div>
+                    <h1 class="text-xl font-semibold text-brand-600 ml-2">OpenManus</h1>
+                </div>
+            </header>
+            
+            <div class="p-4 border-b border-gray-200">
+                <button id="new-chat-button" class="w-full bg-brand-500 hover:bg-brand-600 text-white py-2 px-4 rounded-md transition-colors duration-200 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    新任务
+                </button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-2">
+                <h2 class="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2 px-2">历史记录</h2>
+                <div id="history-list" class="space-y-1">
+                    <!-- 历史记录将在这里动态添加 -->
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-gray-200">
+                <button id="clear-history-button" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-md transition-colors duration-200 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    清空历史
+                </button>
+            </div>
+        </div>
+
+        <!-- 中间主内容区域 -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <header class="h-16 bg-white border-b border-gray-200 flex items-center px-6">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-semibold text-gray-800">OpenManus</h1>
+                    <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-100 text-brand-800">
+                        智能助手
+                    </span>
+                </div>
+                <div class="ml-auto flex items-center space-x-4">
+                    <button id="record-button" class="p-1.5 rounded-md text-gray-500 hover:bg-gray-100" title="记录日志">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <circle cx="12" cy="12" r="6" fill="currentColor" />
+                        </svg>
+                    </button>
+                    <button id="pause-button" class="p-1.5 rounded-md text-gray-500 hover:bg-gray-100" title="暂停日志">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </button>
+                    <button id="save-button" class="p-1.5 rounded-md text-gray-500 hover:bg-gray-100" title="保存会话">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <div class="flex-1 flex overflow-hidden">
+                <!-- 聊天区域 -->
+                <div class="flex-1 flex flex-col overflow-hidden">
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-white scrollbar-thin">
+                        <!-- 聊天消息将在这里动态添加 -->
+                        <div class="bot-message">
+                            <div class="flex items-start">
+                                <div class="flex-shrink-0 mr-3">
+                                    <div class="h-8 w-8 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="flex-1 bg-gray-50 rounded-lg p-4">
+                                    <p class="text-gray-800">你好！我是OpenManus智能助手。请输入您的问题或指令，我会尽力帮助您。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 border-t border-gray-200 bg-white">
+                        <div class="flex">
+                            <input id="user-input" type="text" placeholder="输入您的问题或指令..." 
+                                class="flex-1 px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                            <button id="send-button" 
+                                class="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-r-lg transition-colors duration-200 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                                发送
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧内容区域 -->
+                <div class="w-1/2 flex flex-col border-l border-gray-200">
+                    <div class="p-2 border-b border-gray-200 bg-white flex items-center">
+                        <div class="flex space-x-1">
+                            <button class="tab-button px-3 py-1.5 font-medium text-sm rounded-md bg-brand-50 text-brand-700" data-tab="browser">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                </svg>
+                                浏览器
+                            </button>
+                            <button class="tab-button px-3 py-1.5 font-medium text-sm rounded-md text-gray-600 hover:bg-gray-50" data-tab="logs">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                                日志
+                            </button>
+                            <button class="tab-button px-3 py-1.5 font-medium text-sm rounded-md text-gray-600 hover:bg-gray-50" data-tab="files">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                文件
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="tab-content flex-1" id="browser-content">
+                        <div class="h-full flex flex-col">
+                            <div class="bg-gray-100 border-b border-gray-200 p-2 flex items-center">
+                                <div class="flex items-center bg-white rounded-md border border-gray-300 flex-1 px-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                                    </svg>
+                                    <input id="browser-url" type="text" class="flex-1 py-1 px-2 focus:outline-none text-sm" readonly />
+                                    <button id="open-url-button" class="text-brand-600 hover:text-brand-800 text-sm px-2">
+                                        打开
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="browser-view" class="flex-1 bg-white overflow-hidden">
+                                <iframe id="browser-iframe" class="w-full h-full border-none" sandbox="allow-same-origin allow-scripts"></iframe>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-content hidden flex-1 h-full" id="logs-content">
+                        <div class="h-full flex flex-col">
+                            <div class="bg-gray-800 border-b border-gray-700 p-2 flex items-center">
+                                <div class="flex items-center space-x-2">
+                                    <button id="clear-logs-button" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-md">
+                                        清空日志
+                                    </button>
+                                    <button id="auto-scroll-button" class="px-3 py-1 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-md">
+                                        自动滚动: 开
+                                    </button>
+                                    <select id="log-filter" class="bg-gray-700 text-white text-xs rounded-md px-2 py-1 border border-gray-600">
+                                        <option value="all">所有日志</option>
+                                        <option value="info">信息</option>
+                                        <option value="warning">警告</option>
+                                        <option value="error">错误</option>
+                                        <option value="tool">工具执行</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="output-log" class="flex-1 overflow-y-auto p-4 bg-gray-900 text-gray-200 font-mono text-sm scrollbar-thin" style="height: calc(100% - 40px);"></div>
+                        </div>
+                    </div>
+
+                    <div class="tab-content hidden flex-1" id="files-content">
+                        <div class="h-full flex flex-col">
+                            <div id="saved-files" class="p-4 border-b border-gray-200 bg-gray-50 overflow-y-auto max-h-40">
+                                <p class="text-gray-500 italic">尚未保存任何文件</p>
+                            </div>
+                            <div id="file-preview" class="flex-1 overflow-y-auto p-4 font-mono text-sm bg-white"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <footer class="bg-white border-t border-gray-200 p-2 text-xs text-gray-500">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <span>OpenManus agent Made by ALVIN appreciate @mannaandpoem project</span>
+                    </div>
+                    <div>
+                        <span>version 1.0.0</span>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 加载组件和主脚本 -->
+    <script src="/static/js/components/chat.js"></script>
+    <script src="/static/js/components/browser.js"></script>
+    <script src="/static/js/components/logger.js"></script>
+    <script src="/static/js/components/fileManager.js"></script>
+    <script src="/static/js/components/history.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
