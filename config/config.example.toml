@@ -1,0 +1,6 @@
+[llm]
+model = "deepseek-chat"
+base_url = "https://api.deepseek.com"
+api_key = "sk-..." # 写你的key
+max_tokens = 4096
+temperature = 0.0
